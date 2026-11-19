@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>אתר 1: תחנת מצלמות במה</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { margin: 0; background-color: #0d0d0d; color: #f0f0f0; display: flex; flex-direction: column; height: 100vh; }
+    
+    header { background-color: #1a1a1a; padding: 12px 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    header h1 { margin: 0; font-size: 1.2rem; color: #4fc3f7; }
+    
+    .bar-group { display: flex; align-items: center; gap: 8px; background: #252525; padding: 6px 12px; border-radius: 8px; border: 1px solid #444; }
+    select, input[type="number"] { background: #121212; color: #fff; border: 1px solid #555; padding: 5px 8px; border-radius: 5px; font-weight: bold; }
+    input[type="number"] { width: 55px; text-align: center; }
+    
+    button { background: #2979ff; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
+    button:hover { background: #1565c0; }
+    button.warning { background: #f57c00; color: #000; }
+    button.success { background: #2e7d32; }
+
+    .main-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; }
+    .canvas-wrapper { position: relative; border: 2px solid #333; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 25px rgba(0,0,0,0.8); background: #000; }
+    video { display: block; max-width: 100%; max-height: 70vh; }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: grab; }
+    canvas:active { cursor: grabbing; }
+
+    .controls { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
+    .status-pill { padding: 5px 12px; border-radius: 20px; font-size: 0.82rem; background: #1b5e20; color: #a5d6a7; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📷 אתר מצלמות (זיהוי מגש מיקרופונים)</h1>
+  
+  <div class="bar-group">
+    <label>צד במה:</label>
+    <select id="sideSelect" onchange="sendUpdateToController()">
+      <option value="right">צד ימין (מצלמה 1)</option>
+      <option value="left">צד שמאל (מצלמה 2)</option>
+    </select>
+  </div>
+
+  <div class="bar-group">
+    <label>כמות מיקרופונים:</label>
+    <input type="number" id="micCountInput" value="10" min="1" max="32">
+    <button onclick="buildSlots()">עדכן משבצות</button>
+  </div>
+
+  <div class="status-pill" id="linkStatus">🟢 משדר לבקר הראשי</div>
+</header>
+
+<div class="main-area">
+  <div class="canvas-wrapper">
+    <video id="webcam" autoplay muted playsinline></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="controls">
+    <button onclick="startCamera()">📷 1. הפעל מצלמה</button>
+    <button class="warning" onclick="calibrateTray()">📸 2. צלם מגש ריק (כיול)</button>
+    <button class="success" onclick="autoArrange()">⊞ סדר משבצות אוטומטית</button>
+    <div class="bar-group">
+      <label style="font-size:0.82rem;">רגישות זיהוי:</label>
+      <input type="range" id="sensitivitySlider" min="15" max="80" value="35">
+    </div>
+  </div>
+</div>
+
+<canvas id="procCanvas" style="display:none;"></canvas>
+
+<script>
+  const video = document.getElementById('webcam');
+  const canvas = document.getElementById('overlay');
+  const ctx = canvas.getContext('2d');
+  const procCanvas = document.getElementById('procCanvas');
+  const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
+
+  // ערוץ תקשורת ייעודי בין אתר המצלמות לאתר הבקר
+  const bridge = new BroadcastChannel('stage_audio_bridge');
+
+  let slots = [];
+  let refFrame = null;
+  let cameraActive = false;
+  let draggingSlot = null;
+  let offsetX = 0, offsetY = 0;
+
+  function buildSlots(customCount = null) {
+    if (customCount !== null) {
+      document.getElementById('micCountInput').value = customCount;
+    }
+    const count = Math.max(1, Math.min(32, parseInt(document.getElementById('micCountInput').value) || 10));
+    
+    slots = [];
+    for (let i = 1; i <= count; i++) {
+      slots.push({
+        id: i,
+        onTray: false,
+        diff: 0,
+        x: 30 + ((i - 1) % 5) * 115,
+        y: 35 + Math.floor((i - 1) / 5) * 85,
+        w: 95,
+        h: 65
+      });
+    }
+    sendUpdateToController();
+  }
+
+  function autoArrange() {
+    const w = canvas.width || 640;
+    const cols = Math.ceil(Math.sqrt(slots.length)) || 1;
+    const slotW = Math.min(105, Math.floor((w - 30) / cols) - 10);
+    const slotH = 65;
+
+    slots.forEach((s, idx) => {
+      s.w = slotW;
+      s.h = slotH;
+      s.x = 20 + (idx % cols) * (slotW + 10);
+      s.y = 20 + Math.floor(idx / cols) * (slotH + 10);
+    });
+  }
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        procCanvas.width = video.videoWidth;
+        procCanvas.height = video.videoHeight;
+        cameraActive = true;
+        processLoop();
+      };
+    } catch (err) {
+      alert('לא ניתן לגשת למצלמה. אנא אשר הרשאות בדפדפן.');
+    }
+  }
+
+  function calibrateTray() {
+    if (!cameraActive) {
+      alert('הפעל קודם את המצלמה!');
+      return;
+    }
+    procCtx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
+    refFrame = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
+  }
+
+  function processLoop() {
+    if (!cameraActive) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    let currFrame = null;
+    if (refFrame) {
+      procCtx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
+      currFrame = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
+    }
+
+    const threshold = parseInt(document.getElementById('sensitivitySlider').value);
+    let stateChanged = false;
+
+    slots.forEach(s => {
+      if (refFrame && currFrame) {
+        const diff = calcSlotDiff(s, refFrame.data, currFrame.data, procCanvas.width);
+        s.diff = Math.round(diff);
+        const isPresent = diff > threshold;
+
+        if (s.onTray !== isPresent) {
+          s.onTray = isPresent;
+          stateChanged = true;
+        }
+      }
+
+      // ציור המשבצת
+      ctx.strokeStyle = s.onTray ? '#ff1744' : '#00e676';
+      ctx.fillStyle = s.onTray ? 'rgba(255, 23, 68, 0.3)' : 'rgba(0, 230, 118, 0.15)';
+      ctx.lineWidth = 2.5;
+      ctx.fillRect(s.x, s.y, s.w, s.h);
+      ctx.strokeRect(s.x, s.y, s.w, s.h);
+
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(`#${s.id} ${s.onTray ? 'במגש (MUTE)' : 'מורם'}`, s.x + 5, s.y + 18);
+    });
+
+    if (stateChanged) {
+      sendUpdateToController();
+    }
+
+    requestAnimationFrame(processLoop);
+  }
+
+  function calcSlotDiff(slot, ref, curr, width) {
+    let total = 0, count = 0;
+    const sx = Math.max(0, Math.floor(slot.x));
+    const sy = Math.max(0, Math.floor(slot.y));
+    const ex = Math.min(width, Math.floor(slot.x + slot.w));
+    const ey = Math.min(procCanvas.height, Math.floor(slot.y + slot.h));
+
+    for (let y = sy; y < ey; y += 2) {
+      for (let x = sx; x < ex; x += 2) {
+        const i = (y * width + x) * 4;
+        total += (Math.abs(ref[i] - curr[i]) + Math.abs(ref[i+1] - curr[i+1]) + Math.abs(ref[i+2] - curr[i+2])) / 3;
+        count++;
+      }
+    }
+    return count > 0 ? total / count : 0;
+  }
+
+  // שליחת מצב המצלמה לאתר הבקר
+  function sendUpdateToController() {
+    const side = document.getElementById('sideSelect').value;
+    const trayMap = {};
+    slots.forEach(s => { trayMap[s.id] = s.onTray; });
+
+    const packet = {
+      type: 'CAMERA_REPORT',
+      side: side,
+      timestamp: Date.now(),
+      trayMap: trayMap
+    };
+
+    bridge.postMessage(packet);
+    localStorage.setItem(`cam_state_${side}`, JSON.stringify(packet));
+  }
+
+  // קבלת פקודות סנכרון או שינוי כמויות מאתר הבקר
+  bridge.onmessage = (e) => {
+    const msg = e.data;
+    if (!msg) return;
+    if (msg.type === 'PING_CAMERAS') {
+      sendUpdateToController();
+    } else if (msg.type === 'SYNC_QUANTITIES') {
+      buildSlots(msg.micCount);
+    }
+  };
+
+  // גרירת משבצות בעכבר
+  canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    for (let i = slots.length - 1; i >= 0; i--) {
+      const s = slots[i];
+      if (mx >= s.x && mx <= s.x + s.w && my >= s.y && my <= s.y + s.h) {
+        draggingSlot = s;
+        offsetX = mx - s.x;
+        offsetY = my - s.y;
+        break;
+      }
+    }
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (!draggingSlot) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    draggingSlot.x = Math.max(0, Math.min(canvas.width - draggingSlot.w, mx - offsetX));
+    draggingSlot.y = Math.max(0, Math.min(canvas.height - draggingSlot.h, my - offsetY));
+  });
+
+  canvas.addEventListener('mouseup', () => { draggingSlot = null; });
+
+  // אתחול
+  buildSlots();
+  setInterval(sendUpdateToController, 1500);
+</script>
+</body>
+</html>

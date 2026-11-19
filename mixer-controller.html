@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>אתר 2: בקר מיקסר ראשי</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { margin: 0; background-color: #121212; color: #f0f0f0; display: flex; flex-direction: column; height: 100vh; }
+    
+    header { background-color: #1e1e1e; padding: 12px 24px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    header h1 { margin: 0; font-size: 1.25rem; color: #4fc3f7; }
+    
+    .config-bar { display: flex; align-items: center; gap: 10px; background: #2a2a2a; padding: 6px 14px; border-radius: 8px; border: 1px solid #444; }
+    .config-bar input { width: 55px; padding: 4px; border-radius: 4px; border: 1px solid #555; background: #121212; color: #fff; font-weight: bold; text-align: center; }
+    
+    button { background: #2979ff; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    button:hover { background: #1565c0; }
+    button.danger { background: #d32f2f; }
+    button.secondary { background: #424242; }
+
+    .status-strip { background: #181818; padding: 10px 24px; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; font-size: 0.9rem; }
+    .cam-badge { padding: 6px 12px; border-radius: 6px; background: #2c1618; border: 1px solid #b71c1c; color: #ff8a80; font-weight: bold; }
+    .cam-badge.online { background: #1b5e20; border-color: #4caf50; color: #a5d6a7; }
+
+    .content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+    .section-title { font-size: 1.05rem; color: #4fc3f7; border-bottom: 1px solid #333; padding-bottom: 6px; margin: 0 0 12px 0; display: flex; justify-content: space-between; }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+    
+    .card { background: #242424; border: 2px solid #333; border-radius: 8px; padding: 12px 8px; text-align: center; transition: 0.15s; user-select: none; }
+    .card.headset { cursor: pointer; }
+    .card.headset:hover { border-color: #4fc3f7; }
+    
+    .card.live { background: #1b5e20; border-color: #4caf50; box-shadow: 0 0 12px rgba(76, 175, 80, 0.35); }
+    .card.muted { background: #2c1618; border-color: #b71c1c; }
+
+    .ch-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 5px; }
+    .ch-badge { font-size: 0.8rem; padding: 3px 8px; border-radius: 4px; display: inline-block; background: #424242; }
+    .card.live .ch-badge { background: #4caf50; color: #000; font-weight: bold; }
+    .card.muted .ch-badge { background: #d32f2f; color: #fff; }
+    .ch-loc { font-size: 0.75rem; color: #ccc; margin-top: 6px; }
+
+    .log-box { background: #0b0b0b; border: 1px solid #333; border-radius: 6px; padding: 10px; height: 140px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; color: #81c784; direction: ltr; text-align: left; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎛️ אתר בקר ראשי (שליטה במיקסר)</h1>
+  
+  <div class="config-bar">
+    <label>🎤 מיקרופונים:</label>
+    <input type="number" id="micCountInput" value="10" min="0" max="32">
+    <label>🎧 מדונות:</label>
+    <input type="number" id="headsetCountInput" value="7" min="0" max="32">
+    <button onclick="applyQuantities()">החל כמויות וסנכרן מצלמות</button>
+  </div>
+
+  <div style="display:flex; gap:8px;">
+    <button class="secondary" onclick="window.open('cameras-station.html', '_blank')">➕ פתח חלון מצלמה</button>
+    <button class="danger" onclick="emergencyMuteAll()">🔇 השתק הכל</button>
+  </div>
+</header>
+
+<div class="status-strip">
+  <div class="cam-badge" id="badgeRight">📷 מצלמת צד ימין: לא מחוברת</div>
+  <div class="cam-badge" id="badgeLeft">📷 מצלמת צד שמאל: לא מחוברת</div>
+</div>
+
+<div class="content">
+  <div>
+    <h2 class="section-title">
+      <span>🎤 מיקרופונים ידניים (נשלטים אוטומטית מהמצלמות)</span>
+      <span id="micSummary" style="color:#aaa; font-size:0.85rem;"></span>
+    </h2>
+    <div class="grid" id="micsGrid"></div>
+  </div>
+
+  <div>
+    <h2 class="section-title">
+      <span>🎧 מדונות (לחיצה להפעלה / השתקה מהירה)</span>
+      <span id="headsetSummary" style="color:#aaa; font-size:0.85rem;"></span>
+    </h2>
+    <div class="grid" id="headsetsGrid"></div>
+  </div>
+
+  <div>
+    <h2 class="section-title">📡 יומן פקודות למיקסר (OSC Output)</h2>
+    <div class="log-box" id="oscLog">Controller ready. Waiting for camera stations...</div>
+  </div>
+</div>
+
+<script>
+  const bridge = new BroadcastChannel('stage_audio_bridge');
+  const oscLog = document.getElementById('oscLog');
+
+  let mics = [];
+  let headsets = [];
+  let cameras = {
+    right: { lastSeen: 0, trayMap: {} },
+    left: { lastSeen: 0, trayMap: {} }
+  };
+
+  function applyQuantities() {
+    const micCount = Math.max(0, Math.min(32, parseInt(document.getElementById('micCountInput').value) || 0));
+    const headsetCount = Math.max(0, Math.min(32, parseInt(document.getElementById('headsetCountInput').value) || 0));
+
+    mics = [];
+    for (let i = 1; i <= micCount; i++) {
+      mics.push({
+        id: i,
+        channelNum: i,
+        name: `מיקרופון ${i}`,
+        onRight: false,
+        onLeft: false,
+        active: true
+      });
+    }
+
+    headsets = [];
+    for (let i = 1; i <= headsetCount; i++) {
+      headsets.push({
+        id: i,
+        channelNum: micCount + i,
+        name: `מדונה ${i}`,
+        active: false
+      });
+    }
+
+    // שליחת פקודת עדכון כמויות אוטומטית לכל אתרי המצלמות הפתוחים
+    bridge.postMessage({ type: 'SYNC_QUANTITIES', micCount: micCount });
+    logOSC(`QUANTITIES UPDATED: ${micCount} Mics, ${headsetCount} Headsets.`);
+    
+    recalculateChannels();
+    renderUI();
+  }
+
+  // קבלת דיווחים מאתר המצלמות
+  bridge.onmessage = (e) => {
+    const msg = e.data;
+    if (msg && msg.type === 'CAMERA_REPORT') {
+      cameras[msg.side] = {
+        lastSeen: Date.now(),
+        trayMap: msg.trayMap || {}
+      };
+      updateCameraBadges();
+      recalculateChannels();
+    }
+  };
+
+  // סנכרון גיבוי דרך localStorage
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'cam_state_right' || e.key === 'cam_state_left') {
+      const msg = JSON.parse(e.newValue);
+      if (msg) {
+        cameras[msg.side] = { lastSeen: Date.now(), trayMap: msg.trayMap || {} };
+        updateCameraBadges();
+        recalculateChannels();
+      }
+    }
+  });
+
+  function updateCameraBadges() {
+    const now = Date.now();
+    const bRight = document.getElementById('badgeRight');
+    const bLeft = document.getElementById('badgeLeft');
+
+    if (now - cameras.right.lastSeen < 4000) {
+      bRight.className = 'cam-badge online';
+      bRight.innerText = '📷 מצלמת צד ימין: מחוברת';
+    } else {
+      bRight.className = 'cam-badge';
+      bRight.innerText = '📷 מצלמת צד ימין: לא מחוברת';
+    }
+
+    if (now - cameras.left.lastSeen < 4000) {
+      bLeft.className = 'cam-badge online';
+      bLeft.innerText = '📷 מצלמת צד שמאל: מחוברת';
+    } else {
+      bLeft.className = 'cam-badge';
+      bLeft.innerText = '📷 מצלמת צד שמאל: לא מחוברת';
+    }
+  }
+
+  function recalculateChannels() {
+    mics.forEach(m => {
+      m.onRight = !!cameras.right.trayMap[m.id];
+      m.onLeft = !!cameras.left.trayMap[m.id];
+
+      const isOnAnyTray = m.onRight || m.onLeft;
+      const shouldBeActive = !isOnAnyTray;
+
+      if (m.active !== shouldBeActive) {
+        m.active = shouldBeActive;
+        const reason = m.onRight ? 'נמצא במגש ימין' : (m.onLeft ? 'נמצא במגש שמאל' : 'מורם לבמה');
+        sendOSC(m.channelNum, m.name, m.active, reason);
+      }
+    });
+    renderUI();
+  }
+
+  function renderUI() {
+    const micsGrid = document.getElementById('micsGrid');
+    const headsetsGrid = document.getElementById('headsetsGrid');
+    micsGrid.innerHTML = '';
+    headsetsGrid.innerHTML = '';
+
+    let activeMics = 0;
+    mics.forEach(m => {
+      if (m.active) activeMics++;
+      let loc = 'על הבמה (פתוח)';
+      if (m.onRight && m.onLeft) loc = 'זוהה בשני הצדדים';
+      else if (m.onRight) loc = 'מונח בימין';
+      else if (m.onLeft) loc = 'מונח בשמאל';
+
+      const card = document.createElement('div');
+      card.className = `card ${m.active ? 'live' : 'muted'}`;
+      card.innerHTML = `
+        <div class="ch-name">${m.name}</div>
+        <div class="ch-badge">${m.active ? 'ON (פתוח)' : 'MUTE (מושתק)'}</div>
+        <div class="ch-loc">${loc}</div>
+      `;
+      micsGrid.appendChild(card);
+    });
+    document.getElementById('micSummary').innerText = `פעילים: ${activeMics}/${mics.length}`;
+
+    let activeHeadsets = 0;
+    headsets.forEach(h => {
+      if (h.active) activeHeadsets++;
+      const card = document.createElement('div');
+      card.className = `card headset ${h.active ? 'live' : 'muted'}`;
+      card.innerHTML = `
+        <div class="ch-name">${h.name}</div>
+        <div class="ch-badge">${h.active ? 'ON (פתוח)' : 'MUTE (מושתק)'}</div>
+        <div class="ch-loc">ערוץ ${h.channelNum} • לחץ להחלפה</div>
+      `;
+      card.onclick = () => {
+        h.active = !h.active;
+        sendOSC(h.channelNum, h.name, h.active, 'Manual Toggle');
+        renderUI();
+      };
+      headsetsGrid.appendChild(card);
+    });
+    document.getElementById('headsetSummary').innerText = `פעילות: ${activeHeadsets}/${headsets.length}`;
+  }
+
+  function sendOSC(chNum, name, isOpen, reason) {
+    const val = isOpen ? 1 : 0;
+    const chStr = String(chNum).padStart(2, '0');
+    logOSC(`OSC -> /ch/${chStr}/mix/on ${val} [${name}: ${isOpen ? 'UNMUTE' : 'MUTE'} | ${reason}]`);
+  }
+
+  function logOSC(msg) {
+    const time = new Date().toLocaleTimeString('he-IL');
+    oscLog.innerHTML = `[${time}] ${msg}<br>` + oscLog.innerHTML;
+  }
+
+  function emergencyMuteAll() {
+    mics.forEach(m => { m.active = false; sendOSC(m.channelNum, m.name, false, 'Emergency'); });
+    headsets.forEach(h => { h.active = false; sendOSC(h.channelNum, h.name, false, 'Emergency'); });
+    renderUI();
+  }
+
+  // אתחול
+  applyQuantities();
+  bridge.postMessage({ type: 'PING_CAMERAS' });
+  setInterval(updateCameraBadges, 2000);
+</script>
+</body>
+</html>
