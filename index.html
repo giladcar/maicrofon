@@ -15,14 +15,20 @@
     .config-bar input[type="number"] { width: 55px; padding: 4px; border-radius: 4px; border: 1px solid #555; background: #121212; color: #fff; font-weight: bold; text-align: center; }
     .config-bar input[type="text"] { width: 130px; padding: 4px 8px; border-radius: 4px; border: 1px solid #555; background: #121212; color: #4fc3f7; font-weight: bold; text-align: center; direction: ltr; }
     
-    button { background: #2979ff; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .mute-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button { background: #2979ff; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 0.85rem; }
     button:hover { background: #1565c0; }
     button.danger { background: #d32f2f; }
+    button.danger:hover { background: #b71c1c; }
+    button.warning { background: #e65100; }
+    button.warning:hover { background: #bf360c; }
     button.success { background: #2e7d32; }
+    button.success:hover { background: #1b5e20; }
 
     .rfid-bar { background: #181818; padding: 10px 24px; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; font-size: 0.85rem; }
     .status-badge { padding: 5px 12px; border-radius: 6px; background: #2c1618; border: 1px solid #b71c1c; color: #ff8a80; font-weight: bold; }
     .status-badge.online { background: #1b5e20; border-color: #4caf50; color: #a5d6a7; }
+    .status-badge.locked { background: #e65100; border-color: #ff9800; color: #fff; }
 
     .rfid-input-box { display: flex; align-items: center; gap: 6px; background: #222; padding: 5px 10px; border-radius: 6px; border: 1px solid #444; }
     .rfid-input-box input, .rfid-input-box select { background: #111; border: 1px solid #555; color: #00e676; padding: 4px 8px; border-radius: 4px; font-family: monospace; }
@@ -30,7 +36,7 @@
     .content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
     .section-title { font-size: 1.05rem; color: #4fc3f7; border-bottom: 1px solid #333; padding-bottom: 6px; margin: 0 0 12px 0; display: flex; justify-content: space-between; }
     
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; }
     
     .card { background: #242424; border: 2px solid #333; border-radius: 8px; padding: 12px 8px; text-align: center; transition: 0.15s; position: relative; }
     .card.live { background: #1b5e20; border-color: #4caf50; box-shadow: 0 0 12px rgba(76, 175, 80, 0.35); }
@@ -39,16 +45,15 @@
 
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 214, 0, 0.6); } 70% { box-shadow: 0 0 0 10px rgba(255, 214, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 214, 0, 0); } }
 
-    .ch-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 4px; }
-    .ch-badge { font-size: 0.8rem; padding: 3px 8px; border-radius: 4px; display: inline-block; background: #424242; cursor: pointer; }
+    .ch-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 5px; }
+    .ch-badge { font-size: 0.82rem; padding: 4px 10px; border-radius: 4px; display: inline-block; background: #424242; cursor: pointer; }
     .card.live .ch-badge { background: #4caf50; color: #000; font-weight: bold; }
     .card.muted .ch-badge { background: #d32f2f; color: #fff; }
     
-    .ch-loc { font-size: 0.74rem; color: #ddd; margin-top: 5px; }
-    .tag-id { font-family: monospace; font-size: 0.7rem; color: #aaa; margin-top: 5px; background: #151515; padding: 2px 4px; border-radius: 4px; direction: ltr; }
+    .ch-loc { font-size: 0.75rem; color: #ddd; margin-top: 6px; }
+    .tag-id { font-family: monospace; font-size: 0.72rem; color: #aaa; margin-top: 5px; background: #151515; padding: 2px 4px; border-radius: 4px; direction: ltr; }
     
-    .card-actions { display: flex; gap: 4px; margin-top: 6px; }
-    .small-btn { flex: 1; background: #37474f; font-size: 0.7rem; padding: 4px 4px; }
+    .small-btn { width: 100%; margin-top: 7px; background: #37474f; font-size: 0.74rem; padding: 5px 6px; }
     .small-btn:hover { background: #546e7a; }
 
     .log-box { background: #0b0b0b; border: 1px solid #333; border-radius: 6px; padding: 10px; height: 140px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; color: #81c784; direction: ltr; text-align: left; }
@@ -69,17 +74,23 @@
     <button onclick="applyQuantities()">החל כמויות</button>
   </div>
 
-  <button class="danger" onclick="emergencyMuteAll()">🔇 השתק הכל</button>
+  <!-- 3 כפתורי השתקה ייעודיים + כפתור שחרור -->
+  <div class="mute-controls">
+    <button class="danger" onclick="muteAll()">🔇 השתק הכל</button>
+    <button class="warning" onclick="muteAllMics()">🎤 השתק מיקרופונים</button>
+    <button class="warning" onclick="muteAllHeadsets()">🎧 השתק מדונות</button>
+    <button class="success" id="unlockAutoBtn" style="display:none;" onclick="unlockAutoMode()">🔊 שחרר נעילת השתקה</button>
+  </div>
 </header>
 
 <div class="rfid-bar">
   <div class="status-badge" id="cloudStatus">🌐 ענן: מתחבר...</div>
   <div class="status-badge" id="padRightStatus">📡 משטח ימין: ממתין...</div>
   <div class="status-badge" id="padLeftStatus">📡 משטח שמאל: ממתין...</div>
+  <div class="status-badge locked" id="autoLockBadge" style="display:none;">🔒 מצב השתקה ידני נעול</div>
 
-  <!-- קליטת קורא UHF RFID שולחני (Keyboard Wedge) -->
   <div class="rfid-input-box">
-    <label>קורא שולחני / בדיקה:</label>
+    <label>קורא שולחני:</label>
     <select id="simSide">
       <option value="right">משטח ימין</option>
       <option value="left">משטח שמאל</option>
@@ -120,12 +131,12 @@
   let learningChannelId = null;
   let savedTagMap = JSON.parse(localStorage.getItem('uhf_rfid_tags') || '{}');
 
-  // מעקב זמנים אחרונים שבהם כל משטח דיווח
-  let padHeartbeat = { right: 0, left: 0 };
-  // מתי כל תגית נראתה לאחרונה על כל משטח (מילישניות)
-  let tagLastSeen = { right: {}, left: {} };
+  // דגל שמונע מלולאת ה-RFID לפתוח מחדש מיקרופונים אחרי שלחצת "השתק הכל" או "השתק מיקרופונים"
+  let micsForceMuted = false;
 
-  const TAG_TIMEOUT_MS = 1200; // השהיית בטיחות של 1.2 שניות למניעת קפיצות רדיו
+  let padHeartbeat = { right: 0, left: 0 };
+  let tagLastSeen = { right: {}, left: {} };
+  const TAG_TIMEOUT_MS = 1200;
 
   function connectCloud() {
     if (mqttClient) mqttClient.end();
@@ -151,7 +162,6 @@
         const side = (data.side === 'left') ? 'left' : 'right';
         padHeartbeat[side] = Date.now();
 
-        // פורמט 1: המשטח שולח מערך של כל התגיות שנמצאות עליו כרגע: { side: "right", tags: ["EPC1", "EPC2"] }
         if (Array.isArray(data.tags)) {
           const now = Date.now();
           data.tags.forEach(t => {
@@ -161,9 +171,7 @@
             }
             tagLastSeen[side][cleanTag] = now;
           });
-        }
-        // פורמט 2: המשטח שולח תגית בודדת בכל קריאה
-        else if (data.tagId) {
+        } else if (data.tagId) {
           handleSingleTagPing(data.tagId, side);
         }
       } catch (e) {}
@@ -183,7 +191,7 @@
         tagId: savedTagMap[i] || `EPC-MIC-${i}`,
         onRight: false,
         onLeft: false,
-        active: true // ברירת מחדל: אם לא על המשטח -> פתוח
+        active: !micsForceMuted
       });
     }
 
@@ -196,7 +204,7 @@
         tagId: savedTagMap[chNum] || `EPC-HS-${i}`,
         onRight: false,
         onLeft: false,
-        active: false // מדונות מתחילות מושתקות עד שמופעלות
+        active: false
       });
     }
 
@@ -240,28 +248,10 @@
     renderUI();
   }
 
-  // סימולציה ידנית לבדיקה על המסך (מניח או מרים תגית מהמשטח)
-  function toggleSimulatedPad(chId) {
-    const ch = channels.find(c => c.id === chId);
-    if (!ch) return;
-    const isCurrentlyOnPad = ch.onRight || ch.onLeft;
-    if (isCurrentlyOnPad) {
-      // הסרה מהמשטח
-      delete tagLastSeen.right[ch.tagId.toUpperCase()];
-      delete tagLastSeen.left[ch.tagId.toUpperCase()];
-    } else {
-      // הנחה על משטח ימין (נחדש את החותמת כל חצי שנייה בסימולציה)
-      tagLastSeen.right[ch.tagId.toUpperCase()] = Date.now() + 99999999;
-    }
-    evaluatePresenceLoop();
-  }
-
-  // לולאה שרצה כל 250 מילישניות ובודקת אילו תגיות נמצאות כרגע על המשטחים
   function evaluatePresenceLoop() {
     const now = Date.now();
     let changed = false;
 
-    // עדכון חיווי חיבור משטחים
     const rBadge = document.getElementById('padRightStatus');
     const lBadge = document.getElementById('padLeftStatus');
     rBadge.className = (now - padHeartbeat.right < 5000) ? 'status-badge online' : 'status-badge';
@@ -281,8 +271,8 @@
         changed = true;
       }
 
-      // עבור מיקרופונים ידניים: מונח על משטח = MUTE, מורם = ON
-      if (ch.type === 'mic') {
+      // מפעיל אוטומציה רק אם המערכת לא בנעילת השתקה גורפת!
+      if (ch.type === 'mic' && !micsForceMuted) {
         const shouldBeOpen = !(seenRight || seenLeft);
         if (ch.active !== shouldBeOpen) {
           ch.active = shouldBeOpen;
@@ -294,6 +284,74 @@
     });
 
     if (changed) renderUI();
+  }
+
+  function updateLockUI() {
+    document.getElementById('unlockAutoBtn').style.display = micsForceMuted ? 'inline-block' : 'none';
+    document.getElementById('autoLockBadge').style.display = micsForceMuted ? 'inline-block' : 'none';
+  }
+
+  // כפתור 1: השתק הכל (מיקרופונים + מדונות)
+  function muteAll() {
+    micsForceMuted = true;
+    updateLockUI();
+    channels.forEach(ch => {
+      if (ch.active) {
+        ch.active = false;
+        sendOSC(ch.id, ch.name, false, 'Mute All');
+      }
+    });
+    logOSC('ACTION: ALL channels muted (Mics + Headsets).');
+    renderUI();
+  }
+
+  // כפתור 2: השתק את כל המיקרופונים בלבד
+  function muteAllMics() {
+    micsForceMuted = true;
+    updateLockUI();
+    channels.forEach(ch => {
+      if (ch.type === 'mic' && ch.active) {
+        ch.active = false;
+        sendOSC(ch.id, ch.name, false, 'Mute All Mics');
+      }
+    });
+    logOSC('ACTION: All Microphones muted.');
+    renderUI();
+  }
+
+  // כפתור 3: השתק את כל המדונות בלבד
+  function muteAllHeadsets() {
+    channels.forEach(ch => {
+      if (ch.type === 'headset' && ch.active) {
+        ch.active = false;
+        sendOSC(ch.id, ch.name, false, 'Mute All Headsets');
+      }
+    });
+    logOSC('ACTION: All Headsets muted.');
+    renderUI();
+  }
+
+  // שחרור נעילת ההשתקה הידנית וחזרה למצב אוטומטי
+  function unlockAutoMode() {
+    micsForceMuted = false;
+    updateLockUI();
+    logOSC('ACTION: Auto RFID control unlocked.');
+    evaluatePresenceLoop();
+    renderUI();
+  }
+
+  function manualToggle(id) {
+    const ch = channels.find(c => c.id === id);
+    if (ch) {
+      // אם מפעילים ידנית מיקרופון בודד בזמן נעילה, נשחרר את הנעילה כדי שיתנהג טבעי
+      if (ch.type === 'mic' && !ch.active && micsForceMuted) {
+        micsForceMuted = false;
+        updateLockUI();
+      }
+      ch.active = !ch.active;
+      sendOSC(ch.id, ch.name, ch.active, 'Manual Toggle');
+      renderUI();
+    }
   }
 
   function renderUI() {
@@ -309,7 +367,7 @@
       if (ch.type === 'mic') { totalMics++; if (ch.active) activeMics++; }
       else { totalHs++; if (ch.active) activeHs++; }
 
-      let locText = ch.type === 'mic' ? 'על הבמה (פתוח)' : 'שליטה ידנית';
+      let locText = ch.type === 'mic' ? (micsForceMuted ? 'מושתק ידנית (נעול)' : 'על הבמה (פתוח)') : 'שליטה ידנית';
       if (ch.onRight && ch.onLeft) locText = 'נמצא בשני המשטחים';
       else if (ch.onRight) locText = 'מונח במשטח ימין';
       else if (ch.onLeft) locText = 'מונח במשטח שמאל';
@@ -322,10 +380,7 @@
         <div class="ch-badge" onclick="manualToggle(${ch.id})">${ch.active ? 'ON (פתוח)' : 'MUTE (מושתק)'}</div>
         <div class="ch-loc">${locText}</div>
         <div class="tag-id">${ch.tagId}</div>
-        <div class="card-actions">
-          <button class="small-btn" onclick="startLearning(${ch.id})">${isLearning ? '⏳ סרוק...' : '🏷️ שייך תגית'}</button>
-          ${ch.type === 'mic' ? `<button class="small-btn" onclick="toggleSimulatedPad(${ch.id})">${(ch.onRight || ch.onLeft) ? '⬆️ הרם' : '⬇️ הנח'}</button>` : ''}
-        </div>
+        <button class="small-btn" onclick="startLearning(${ch.id})">${isLearning ? '⏳ סרוק כעת...' : '🏷️ שייך תגית'}</button>
       `;
 
       if (ch.type === 'mic') micsGrid.appendChild(card);
@@ -334,15 +389,6 @@
 
     document.getElementById('micSummary').innerText = `פעילים: ${activeMics}/${totalMics}`;
     document.getElementById('headsetSummary').innerText = `פעילות: ${activeHs}/${totalHs}`;
-  }
-
-  function manualToggle(id) {
-    const ch = channels.find(c => c.id === id);
-    if (ch) {
-      ch.active = !ch.active;
-      sendOSC(ch.id, ch.name, ch.active, 'Manual Toggle');
-      renderUI();
-    }
   }
 
   function sendOSC(chNum, name, isOpen, reason) {
@@ -354,14 +400,6 @@
   function logOSC(msg) {
     const time = new Date().toLocaleTimeString('he-IL');
     oscLog.innerHTML = `[${time}] ${msg}<br>` + oscLog.innerHTML;
-  }
-
-  function emergencyMuteAll() {
-    channels.forEach(ch => {
-      ch.active = false;
-      sendOSC(ch.id, ch.name, false, 'Emergency Mute');
-    });
-    renderUI();
   }
 
   applyQuantities();
