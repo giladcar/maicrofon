@@ -2,17 +2,19 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>אתר 1: תחנת מצלמות במה</title>
+  <title>תחנת מצלמות במה</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { margin: 0; background-color: #0d0d0d; color: #f0f0f0; display: flex; flex-direction: column; height: 100vh; }
     
     header { background-color: #1a1a1a; padding: 12px 20px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-    header h1 { margin: 0; font-size: 1.2rem; color: #4fc3f7; }
+    header h1 { margin: 0; font-size: 1.15rem; color: #4fc3f7; }
     
     .bar-group { display: flex; align-items: center; gap: 8px; background: #252525; padding: 6px 12px; border-radius: 8px; border: 1px solid #444; }
     select, input[type="number"] { background: #121212; color: #fff; border: 1px solid #555; padding: 5px 8px; border-radius: 5px; font-weight: bold; }
     input[type="number"] { width: 55px; text-align: center; }
+    input[type="text"] { width: 130px; padding: 5px 8px; border-radius: 5px; border: 1px solid #555; background: #121212; color: #4fc3f7; font-weight: bold; text-align: center; direction: ltr; }
     
     button { background: #2979ff; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
     button:hover { background: #1565c0; }
@@ -21,19 +23,25 @@
 
     .main-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; }
     .canvas-wrapper { position: relative; border: 2px solid #333; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 25px rgba(0,0,0,0.8); background: #000; }
-    video { display: block; max-width: 100%; max-height: 70vh; }
+    video { display: block; max-width: 100%; max-height: 68vh; }
     canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: grab; }
     canvas:active { cursor: grabbing; }
 
     .controls { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
-    .status-pill { padding: 5px 12px; border-radius: 20px; font-size: 0.82rem; background: #1b5e20; color: #a5d6a7; font-weight: bold; }
+    .status-pill { padding: 6px 12px; border-radius: 20px; font-size: 0.82rem; background: #424242; color: #fff; font-weight: bold; }
+    .status-pill.connected { background: #1b5e20; color: #a5d6a7; }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>📷 אתר מצלמות (זיהוי מגש מיקרופונים)</h1>
+  <h1>📷 תחנת מצלמות</h1>
   
+  <div class="bar-group">
+    <label>קוד חדר:</label>
+    <input type="text" id="roomCodeInput" value="kibbutz-stage-1" onchange="connectCloud()">
+  </div>
+
   <div class="bar-group">
     <label>צד במה:</label>
     <select id="sideSelect" onchange="sendUpdateToController()">
@@ -43,12 +51,12 @@
   </div>
 
   <div class="bar-group">
-    <label>כמות מיקרופונים:</label>
+    <label>מיקרופונים:</label>
     <input type="number" id="micCountInput" value="10" min="1" max="32">
-    <button onclick="buildSlots()">עדכן משבצות</button>
+    <button onclick="buildSlots()">עדכן</button>
   </div>
 
-  <div class="status-pill" id="linkStatus">🟢 משדר לבקר הראשי</div>
+  <div class="status-pill" id="linkStatus">מתחבר לענן...</div>
 </header>
 
 <div class="main-area">
@@ -60,9 +68,9 @@
   <div class="controls">
     <button onclick="startCamera()">📷 1. הפעל מצלמה</button>
     <button class="warning" onclick="calibrateTray()">📸 2. צלם מגש ריק (כיול)</button>
-    <button class="success" onclick="autoArrange()">⊞ סדר משבצות אוטומטית</button>
+    <button class="success" onclick="autoArrange()">⊞ סדר משבצות</button>
     <div class="bar-group">
-      <label style="font-size:0.82rem;">רגישות זיהוי:</label>
+      <label style="font-size:0.82rem;">רגישות:</label>
       <input type="range" id="sensitivitySlider" min="15" max="80" value="35">
     </div>
   </div>
@@ -77,14 +85,44 @@
   const procCanvas = document.getElementById('procCanvas');
   const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
 
-  // ערוץ תקשורת ייעודי בין אתר המצלמות לאתר הבקר
-  const bridge = new BroadcastChannel('stage_audio_bridge');
+  let mqttClient = null;
+  let currentTopicPrefix = '';
 
   let slots = [];
   let refFrame = null;
   let cameraActive = false;
   let draggingSlot = null;
   let offsetX = 0, offsetY = 0;
+
+  function connectCloud() {
+    if (mqttClient) mqttClient.end();
+    const room = document.getElementById('roomCodeInput').value.trim() || 'kibbutz-stage-1';
+    currentTopicPrefix = `stage_audio_sync/${room}`;
+
+    const pill = document.getElementById('linkStatus');
+    pill.className = 'status-pill';
+    pill.innerText = 'מתחבר לענן...';
+
+    mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+    mqttClient.on('connect', () => {
+      pill.className = 'status-pill connected';
+      pill.innerText = `🟢 מחובר לחדר: ${room}`;
+      mqttClient.subscribe(`${currentTopicPrefix}/control`);
+      sendUpdateToController();
+    });
+
+    mqttClient.on('message', (topic, message) => {
+      try {
+        const msg = JSON.parse(message.toString());
+        if (msg.type === 'PING') {
+          sendUpdateToController();
+        } else if (msg.type === 'SYNC_QUANTITIES') {
+          buildSlots(msg.micCount);
+        }
+      } catch (e) {}
+    });
+  }
 
   function buildSlots(customCount = null) {
     if (customCount !== null) {
@@ -123,7 +161,7 @@
 
   async function startCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 640, height: 480 } });
       video.srcObject = stream;
       video.onloadedmetadata = () => {
         canvas.width = video.videoWidth;
@@ -134,7 +172,7 @@
         processLoop();
       };
     } catch (err) {
-      alert('לא ניתן לגשת למצלמה. אנא אשר הרשאות בדפדפן.');
+      alert('לא ניתן לגשת למצלמה. ודא שהאתר נפתח ב-HTTPS (כמו GitHub Pages) ושאישרת גישה למצלמה.');
     }
   }
 
@@ -173,7 +211,6 @@
         }
       }
 
-      // ציור המשבצת
       ctx.strokeStyle = s.onTray ? '#ff1744' : '#00e676';
       ctx.fillStyle = s.onTray ? 'rgba(255, 23, 68, 0.3)' : 'rgba(0, 230, 118, 0.15)';
       ctx.lineWidth = 2.5;
@@ -209,8 +246,8 @@
     return count > 0 ? total / count : 0;
   }
 
-  // שליחת מצב המצלמה לאתר הבקר
   function sendUpdateToController() {
+    if (!mqttClient || !mqttClient.connected) return;
     const side = document.getElementById('sideSelect').value;
     const trayMap = {};
     slots.forEach(s => { trayMap[s.id] = s.onTray; });
@@ -222,52 +259,55 @@
       trayMap: trayMap
     };
 
-    bridge.postMessage(packet);
-    localStorage.setItem(`cam_state_${side}`, JSON.stringify(packet));
+    mqttClient.publish(`${currentTopicPrefix}/camera/${side}`, JSON.stringify(packet));
   }
 
-  // קבלת פקודות סנכרון או שינוי כמויות מאתר הבקר
-  bridge.onmessage = (e) => {
-    const msg = e.data;
-    if (!msg) return;
-    if (msg.type === 'PING_CAMERAS') {
-      sendUpdateToController();
-    } else if (msg.type === 'SYNC_QUANTITIES') {
-      buildSlots(msg.micCount);
-    }
-  };
-
-  // גרירת משבצות בעכבר
-  canvas.addEventListener('mousedown', (e) => {
+  // גרירת משבצות בעכבר או במגע (Touch לטלפונים/טאבלטים)
+  function getPointerPos(e) {
     const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+  }
 
+  function handleStart(e) {
+    const pos = getPointerPos(e);
     for (let i = slots.length - 1; i >= 0; i--) {
       const s = slots[i];
-      if (mx >= s.x && mx <= s.x + s.w && my >= s.y && my <= s.y + s.h) {
+      if (pos.x >= s.x && pos.x <= s.x + s.w && pos.y >= s.y && pos.y <= s.y + s.h) {
         draggingSlot = s;
-        offsetX = mx - s.x;
-        offsetY = my - s.y;
+        offsetX = pos.x - s.x;
+        offsetY = pos.y - s.y;
         break;
       }
     }
-  });
+  }
 
-  canvas.addEventListener('mousemove', (e) => {
+  function handleMove(e) {
     if (!draggingSlot) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
-    draggingSlot.x = Math.max(0, Math.min(canvas.width - draggingSlot.w, mx - offsetX));
-    draggingSlot.y = Math.max(0, Math.min(canvas.height - draggingSlot.h, my - offsetY));
-  });
+    e.preventDefault();
+    const pos = getPointerPos(e);
+    draggingSlot.x = Math.max(0, Math.min(canvas.width - draggingSlot.w, pos.x - offsetX));
+    draggingSlot.y = Math.max(0, Math.min(canvas.height - draggingSlot.h, pos.y - offsetY));
+  }
 
-  canvas.addEventListener('mouseup', () => { draggingSlot = null; });
+  function handleEnd() { draggingSlot = null; }
+
+  canvas.addEventListener('mousedown', handleStart);
+  canvas.addEventListener('mousemove', handleMove);
+  window.addEventListener('mouseup', handleEnd);
+
+  canvas.addEventListener('touchstart', handleStart, { passive: false });
+  canvas.addEventListener('touchmove', handleMove, { passive: false });
+  window.addEventListener('touchend', handleEnd);
 
   // אתחול
   buildSlots();
-  setInterval(sendUpdateToController, 1500);
+  connectCloud();
+  setInterval(sendUpdateToController, 2000);
 </script>
 </body>
 </html>
