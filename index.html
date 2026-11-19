@@ -2,8 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>בקר מיקסר ראשי</title>
-  <!-- ספריית תקשורת בזמן אמת לעבודה מ-GitHub ובין מכשירים שונים -->
+  <title>בקר מיקסר ראשי - מערכת NFC חכמה</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -16,32 +15,40 @@
     .config-bar input[type="number"] { width: 55px; padding: 4px; border-radius: 4px; border: 1px solid #555; background: #121212; color: #fff; font-weight: bold; text-align: center; }
     .config-bar input[type="text"] { width: 130px; padding: 4px 8px; border-radius: 4px; border: 1px solid #555; background: #121212; color: #4fc3f7; font-weight: bold; text-align: center; direction: ltr; }
     
-    button { background: #2979ff; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    button { background: #2979ff; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
     button:hover { background: #1565c0; }
     button.danger { background: #d32f2f; }
-    button.secondary { background: #424242; }
+    button.success { background: #2e7d32; }
+    button.warning { background: #f57c00; color: #000; }
 
-    .status-strip { background: #181818; padding: 10px 24px; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; font-size: 0.88rem; }
-    .cam-badge { padding: 6px 12px; border-radius: 6px; background: #2c1618; border: 1px solid #b71c1c; color: #ff8a80; font-weight: bold; }
-    .cam-badge.online { background: #1b5e20; border-color: #4caf50; color: #a5d6a7; }
+    .nfc-bar { background: #181818; padding: 10px 24px; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; font-size: 0.88rem; }
+    .status-badge { padding: 6px 12px; border-radius: 6px; background: #2c1618; border: 1px solid #b71c1c; color: #ff8a80; font-weight: bold; }
+    .status-badge.online { background: #1b5e20; border-color: #4caf50; color: #a5d6a7; }
+    .status-badge.scanning { background: #01579b; border-color: #03a9f4; color: #81d4fa; }
+
+    .nfc-input-box { display: flex; align-items: center; gap: 8px; background: #222; padding: 5px 12px; border-radius: 6px; border: 1px solid #444; }
+    .nfc-input-box input { background: #111; border: 1px solid #555; color: #00e676; padding: 4px 8px; border-radius: 4px; font-family: monospace; width: 150px; direction: ltr; }
 
     .content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
     .section-title { font-size: 1.05rem; color: #4fc3f7; border-bottom: 1px solid #333; padding-bottom: 6px; margin: 0 0 12px 0; display: flex; justify-content: space-between; }
     
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
     
-    .card { background: #242424; border: 2px solid #333; border-radius: 8px; padding: 12px 8px; text-align: center; transition: 0.15s; user-select: none; }
-    .card.headset { cursor: pointer; }
-    .card.headset:hover { border-color: #4fc3f7; }
-    
+    .card { background: #242424; border: 2px solid #333; border-radius: 8px; padding: 12px 8px; text-align: center; transition: 0.15s; position: relative; }
     .card.live { background: #1b5e20; border-color: #4caf50; box-shadow: 0 0 12px rgba(76, 175, 80, 0.35); }
     .card.muted { background: #2c1618; border-color: #b71c1c; }
+    .card.learning { border-color: #ffd600; animation: pulse 1s infinite; }
+
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 214, 0, 0.6); } 70% { box-shadow: 0 0 0 10px rgba(255, 214, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 214, 0, 0); } }
 
     .ch-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 5px; }
-    .ch-badge { font-size: 0.8rem; padding: 3px 8px; border-radius: 4px; display: inline-block; background: #424242; }
+    .ch-badge { font-size: 0.8rem; padding: 3px 8px; border-radius: 4px; display: inline-block; background: #424242; cursor: pointer; }
     .card.live .ch-badge { background: #4caf50; color: #000; font-weight: bold; }
     .card.muted .ch-badge { background: #d32f2f; color: #fff; }
-    .ch-loc { font-size: 0.75rem; color: #ccc; margin-top: 6px; }
+    
+    .tag-id { font-family: monospace; font-size: 0.72rem; color: #aaa; margin-top: 6px; background: #151515; padding: 2px 4px; border-radius: 4px; direction: ltr; }
+    .learn-btn { margin-top: 6px; background: #37474f; font-size: 0.72rem; padding: 4px 8px; width: 100%; }
+    .learn-btn:hover { background: #546e7a; }
 
     .log-box { background: #0b0b0b; border: 1px solid #333; border-radius: 6px; padding: 10px; height: 140px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; color: #81c784; direction: ltr; text-align: left; }
   </style>
@@ -49,7 +56,7 @@
 <body>
 
 <header>
-  <h1>🎛️ בקר מיקסר ראשי</h1>
+  <h1>📡 בקר מיקסר ראשי (מבוסס NFC)</h1>
   
   <div class="config-bar">
     <label>קוד חדר:</label>
@@ -58,27 +65,28 @@
     <input type="number" id="micCountInput" value="10" min="0" max="32">
     <label>🎧 מדונות:</label>
     <input type="number" id="headsetCountInput" value="7" min="0" max="32">
-    <button onclick="applyQuantities()">החל וסנכרן</button>
+    <button onclick="applyQuantities()">החל כמויות</button>
   </div>
 
-  <div style="display:flex; gap:8px;">
-    <a href="cameras.html" target="_blank" style="text-decoration:none;">
-      <button class="secondary" type="button">➕ פתח אתר מצלמות</button>
-    </a>
-    <button class="danger" onclick="emergencyMuteAll()">🔇 השתק הכל</button>
-  </div>
+  <button class="danger" onclick="emergencyMuteAll()">🔇 השתק הכל</button>
 </header>
 
-<div class="status-strip">
-  <div class="cam-badge" id="cloudStatus">🌐 ענן סנכרון: מתחבר...</div>
-  <div class="cam-badge" id="badgeRight">📷 מצלמת צד ימין: לא מחוברת</div>
-  <div class="cam-badge" id="badgeLeft">📷 מצלמת צד שמאל: לא מחוברת</div>
+<div class="nfc-bar">
+  <div class="status-badge" id="cloudStatus">🌐 ענן: מתחבר...</div>
+  <button class="success" id="webNfcBtn" onclick="startWebNFC()">📱 הפעל סורק NFC במכשיר (Android)</button>
+  
+  <!-- קלט עבור קורא NFC שולחני או הדמיה ידנית -->
+  <div class="nfc-input-box">
+    <label>קליטת תגית / סימולציה:</label>
+    <input type="text" id="nfcManualInput" placeholder="העבר תגית או הקלד קוד..." onkeydown="if(event.key==='Enter') handleTagScan(this.value, 'USB/Manual')">
+    <button onclick="handleTagScan(document.getElementById('nfcManualInput').value, 'Manual')">סרוק</button>
+  </div>
 </div>
 
 <div class="content">
   <div>
     <h2 class="section-title">
-      <span>🎤 מיקרופונים ידניים (מסונכרנים בזמן אמת מהמצלמות)</span>
+      <span>🎤 מיקרופונים ידניים (העברת תגית NFC מחליפה בין MUTE ל-ON)</span>
       <span id="micSummary" style="color:#aaa; font-size:0.85rem;"></span>
     </h2>
     <div class="grid" id="micsGrid"></div>
@@ -86,15 +94,15 @@
 
   <div>
     <h2 class="section-title">
-      <span>🎧 מדונות (לחיצה להפעלה / השתקה מהירה)</span>
+      <span>🎧 מדונות (תומך גם בתגית NFC על המשדר וגם בלחיצה)</span>
       <span id="headsetSummary" style="color:#aaa; font-size:0.85rem;"></span>
     </h2>
     <div class="grid" id="headsetsGrid"></div>
   </div>
 
   <div>
-    <h2 class="section-title">📡 יומן פקודות למיקסר (OSC Output)</h2>
-    <div class="log-box" id="oscLog">Initializing controller...</div>
+    <h2 class="section-title">📡 יומן סריקות NFC ופקודות מיקסר (OSC)</h2>
+    <div class="log-box" id="oscLog">NFC Controller initialized. Ready to pair tags...</div>
   </div>
 </div>
 
@@ -103,52 +111,40 @@
   let mqttClient = null;
   let currentTopicPrefix = '';
 
-  let mics = [];
-  let headsets = [];
-  let cameras = {
-    right: { lastSeen: 0, trayMap: {} },
-    left: { lastSeen: 0, trayMap: {} }
-  };
+  let channels = []; // מאחד מיקרופונים ומדונות
+  let learningChannelId = null; // מזהה הערוץ שנמצא כרגע במצב "לימוד תגית"
+
+  // טעינת מיפוי תגיות שמור מהזיכרון המקומי של הדפדפן
+  let savedTagMap = JSON.parse(localStorage.getItem('nfc_tag_assignments') || '{}');
 
   function connectCloud() {
-    if (mqttClient) {
-      mqttClient.end();
-    }
+    if (mqttClient) mqttClient.end();
     const room = document.getElementById('roomCodeInput').value.trim() || 'kibbutz-stage-1';
     currentTopicPrefix = `stage_audio_sync/${room}`;
-    
-    const cloudBadge = document.getElementById('cloudStatus');
-    cloudBadge.className = 'cam-badge';
-    cloudBadge.innerText = '🌐 ענן סנכרון: מתחבר...';
 
-    // חיבור לשרת MQTT ציבורי מאובטח (WSS) שעובד חלק מ-GitHub Pages
+    const cloudBadge = document.getElementById('cloudStatus');
+    cloudBadge.className = 'status-badge';
+    cloudBadge.innerText = '🌐 ענן: מתחבר...';
+
     mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
 
     mqttClient.on('connect', () => {
-      cloudBadge.className = 'cam-badge online';
-      cloudBadge.innerText = `🌐 מחובר לחדר: ${room}`;
-      logOSC(`CLOUD CONNECTED: Room "${room}"`);
-      
-      // האזנה לדיווחים ממצלמת ימין ומצלמת שמאל
-      mqttClient.subscribe(`${currentTopicPrefix}/camera/#`);
-      // בקשת עדכון מיידי מהמצלמות
-      mqttClient.publish(`${currentTopicPrefix}/control`, JSON.stringify({ type: 'PING' }));
+      cloudBadge.className = 'status-badge online';
+      cloudBadge.innerText = `🌐 חדר פעיל: ${room}`;
+      logOSC(`CLOUD CONNECTED: Listening for remote NFC readers on room "${room}"`);
+      mqttClient.subscribe(`${currentTopicPrefix}/nfc/#`);
     });
 
     mqttClient.on('message', (topic, message) => {
       try {
         const data = JSON.parse(message.toString());
-        if (data.type === 'CAMERA_REPORT' && (data.side === 'right' || data.side === 'left')) {
-          cameras[data.side] = {
-            lastSeen: Date.now(),
-            trayMap: data.trayMap || {}
-          };
-          updateCameraBadges();
-          recalculateChannels();
+        // תמיכה בשני מצבים: סריקה רגעית (Tap) או נוכחות רציפה על משטח (Presence)
+        if (data.type === 'NFC_SCAN' && data.tagId) {
+          handleTagScan(data.tagId, data.readerSide || 'Remote Reader');
+        } else if (data.type === 'NFC_PRESENCE' && data.tagId) {
+          handleTagPresence(data.tagId, data.isPresent, data.readerSide || 'Tray Reader');
         }
-      } catch (e) {
-        console.error('Parse error', e);
-      }
+      } catch (e) {}
     });
   }
 
@@ -156,76 +152,108 @@
     const micCount = Math.max(0, Math.min(32, parseInt(document.getElementById('micCountInput').value) || 0));
     const headsetCount = Math.max(0, Math.min(32, parseInt(document.getElementById('headsetCountInput').value) || 0));
 
-    mics = [];
+    channels = [];
     for (let i = 1; i <= micCount; i++) {
-      mics.push({
+      channels.push({
         id: i,
-        channelNum: i,
+        type: 'mic',
         name: `מיקרופון ${i}`,
-        onRight: false,
-        onLeft: false,
-        active: true
-      });
-    }
-
-    headsets = [];
-    for (let i = 1; i <= headsetCount; i++) {
-      headsets.push({
-        id: i,
-        channelNum: micCount + i,
-        name: `מדונה ${i}`,
+        tagId: savedTagMap[i] || `TAG-MIC-${i}`, // קוד ברירת מחדל לבדיקה מהירה
         active: false
       });
     }
 
-    if (mqttClient && mqttClient.connected) {
-      mqttClient.publish(`${currentTopicPrefix}/control`, JSON.stringify({
-        type: 'SYNC_QUANTITIES',
-        micCount: micCount
-      }));
+    for (let i = 1; i <= headsetCount; i++) {
+      const chNum = micCount + i;
+      channels.push({
+        id: chNum,
+        type: 'headset',
+        name: `מדונה ${i}`,
+        tagId: savedTagMap[chNum] || `TAG-HS-${i}`,
+        active: false
+      });
     }
 
-    logOSC(`QUANTITIES APPLIED: ${micCount} Mics, ${headsetCount} Headsets.`);
-    recalculateChannels();
+    logOSC(`CONFIG UPDATED: ${micCount} Mics + ${headsetCount} Headsets.`);
     renderUI();
   }
 
-  function updateCameraBadges() {
-    const now = Date.now();
-    const bRight = document.getElementById('badgeRight');
-    const bLeft = document.getElementById('badgeLeft');
-
-    if (now - cameras.right.lastSeen < 5000) {
-      bRight.className = 'cam-badge online';
-      bRight.innerText = '📷 מצלמת צד ימין: מחוברת';
-    } else {
-      bRight.className = 'cam-badge';
-      bRight.innerText = '📷 מצלמת צד ימין: לא מחוברת';
+  // הפעלת סורק NFC מובנה בדפדפן (עובד במכשירי אנדרואיד עם Chrome)
+  async function startWebNFC() {
+    if (!('NDEFReader' in window)) {
+      alert('הדפדפן או המחשב הזה לא תומכים ב-Web NFC מובנה (נתמך ב-Chrome על מכשירי אנדרואיד). תוכל להשתמש בקורא NFC חיצוני או בסימולציה למעלה.');
+      return;
     }
 
-    if (now - cameras.left.lastSeen < 5000) {
-      bLeft.className = 'cam-badge online';
-      bLeft.innerText = '📷 מצלמת צד שמאל: מחוברת';
-    } else {
-      bLeft.className = 'cam-badge';
-      bLeft.innerText = '📷 מצלמת צד שמאל: לא מחוברת';
+    try {
+      const ndef = new NDEFReader();
+      await ndef.scan();
+      const btn = document.getElementById('webNfcBtn');
+      btn.innerText = '📡 סורק NFC פעיל! קרב מדבקה';
+      btn.style.background = '#0288d1';
+      logOSC('Web NFC Scanner started successfully.');
+
+      ndef.onreading = ({ serialNumber }) => {
+        if (serialNumber) {
+          handleTagScan(serialNumber.toUpperCase(), 'Android WebNFC');
+        }
+      };
+    } catch (error) {
+      alert('שגיאה בהפעלת סורק NFC: ' + error.message);
     }
   }
 
-  function recalculateChannels() {
-    mics.forEach(m => {
-      m.onRight = !!cameras.right.trayMap[m.id];
-      m.onLeft = !!cameras.left.trayMap[m.id];
+  // טיפול בסריקת תגית (החלפת מצב ON/MUTE או שיוך תגית חדשה)
+  function handleTagScan(rawTagId, source) {
+    const tagId = String(rawTagId).trim();
+    if (!tagId) return;
+    document.getElementById('nfcManualInput').value = '';
 
-      const isOnAnyTray = m.onRight || m.onLeft;
-      const shouldBeActive = !isOnAnyTray;
-
-      if (m.active !== shouldBeActive) {
-        m.active = shouldBeActive;
-        const reason = m.onRight ? 'נמצא במגש ימין' : (m.onLeft ? 'נמצא במגש שמאל' : 'מורם לבמה');
-        sendOSC(m.channelNum, m.name, m.active, reason);
+    // אם אנחנו במצב "לימוד תגית" לערוץ מסוים
+    if (learningChannelId !== null) {
+      const ch = channels.find(c => c.id === learningChannelId);
+      if (ch) {
+        ch.tagId = tagId;
+        savedTagMap[ch.id] = tagId;
+        localStorage.setItem('nfc_tag_assignments', JSON.stringify(savedTagMap));
+        logOSC(`PAIRED: Tag [${tagId}] assigned to ${ch.name} (Ch ${ch.id})`);
       }
-    });
+      learningChannelId = null;
+      renderUI();
+      return;
+    }
+
+    // חיפוש הערוץ שמשויך לתגית שנסרקה
+    const targetChannel = channels.find(c => c.tagId.toLowerCase() === tagId.toLowerCase());
+    if (!targetChannel) {
+      logOSC(`UNKNOWN TAG SCANNED: [${tagId}] from ${source}. Click "שייך תגית" on a channel first.`);
+      return;
+    }
+
+    // החלפת מצב (Toggle)
+    targetChannel.active = !targetChannel.active;
+    sendOSC(targetChannel.id, targetChannel.name, targetChannel.active, `NFC Scan (${source})`);
+    renderUI();
+  }
+
+  // טיפול במשטח נוכחות רציפה (כאשר תגית יושבת קבוע על משטח = MUTE, מורמת = ON)
+  function handleTagPresence(tagId, isPresentOnTray, source) {
+    const targetChannel = channels.find(c => c.tagId.toLowerCase() === tagId.toLowerCase());
+    if (!targetChannel) return;
+
+    const shouldBeOpen = !isPresentOnTray;
+    if (targetChannel.active !== shouldBeOpen) {
+      targetChannel.active = shouldBeOpen;
+      sendOSC(targetChannel.id, targetChannel.name, targetChannel.active, isPresentOnTray ? `מונח על משטח (${source})` : `הורם ממשטח (${source})`);
+      renderUI();
+    }
+  }
+
+  function startLearningTag(channelId) {
+    learningChannelId = (learningChannelId === channelId) ? null : channelId;
+    if (learningChannelId) {
+      logOSC(`LEARNING MODE: Scan any NFC sticker now to assign it to Channel ${channelId}...`);
+    }
     renderUI();
   }
 
@@ -235,43 +263,45 @@
     micsGrid.innerHTML = '';
     headsetsGrid.innerHTML = '';
 
-    let activeMics = 0;
-    mics.forEach(m => {
-      if (m.active) activeMics++;
-      let loc = 'על הבמה (פתוח)';
-      if (m.onRight && m.onLeft) loc = 'זוהה בשני הצדדים';
-      else if (m.onRight) loc = 'מונח בימין';
-      else if (m.onLeft) loc = 'מונח בשמאל';
+    let activeMics = 0, totalMics = 0;
+    let activeHs = 0, totalHs = 0;
 
-      const card = document.createElement('div');
-      card.className = `card ${m.active ? 'live' : 'muted'}`;
-      card.innerHTML = `
-        <div class="ch-name">${m.name}</div>
-        <div class="ch-badge">${m.active ? 'ON (פתוח)' : 'MUTE (מושתק)'}</div>
-        <div class="ch-loc">${loc}</div>
-      `;
-      micsGrid.appendChild(card);
-    });
-    document.getElementById('micSummary').innerText = `פעילים: ${activeMics}/${mics.length}`;
+    channels.forEach(ch => {
+      if (ch.type === 'mic') {
+        totalMics++;
+        if (ch.active) activeMics++;
+      } else {
+        totalHs++;
+        if (ch.active) activeHs++;
+      }
 
-    let activeHeadsets = 0;
-    headsets.forEach(h => {
-      if (h.active) activeHeadsets++;
+      const isLearning = learningChannelId === ch.id;
       const card = document.createElement('div');
-      card.className = `card headset ${h.active ? 'live' : 'muted'}`;
+      card.className = `card ${ch.active ? 'live' : 'muted'} ${isLearning ? 'learning' : ''}`;
       card.innerHTML = `
-        <div class="ch-name">${h.name}</div>
-        <div class="ch-badge">${h.active ? 'ON (פתוח)' : 'MUTE (מושתק)'}</div>
-        <div class="ch-loc">ערוץ ${h.channelNum} • לחץ להחלפה</div>
+        <div class="ch-name">${ch.name}</div>
+        <div class="ch-badge" onclick="manualToggle(${ch.id})">${ch.active ? 'ON (פתוח)' : 'MUTE (מושתק)'}</div>
+        <div class="tag-id" title="קוד תגית NFC">${ch.tagId}</div>
+        <button class="learn-btn" onclick="startLearningTag(${ch.id})">
+          ${isLearning ? '⏳ קרב מדבקה כעת...' : '🏷️ שייך תגית NFC'}
+        </button>
       `;
-      card.onclick = () => {
-        h.active = !h.active;
-        sendOSC(h.channelNum, h.name, h.active, 'Manual Toggle');
-        renderUI();
-      };
-      headsetsGrid.appendChild(card);
+
+      if (ch.type === 'mic') micsGrid.appendChild(card);
+      else headsetsGrid.appendChild(card);
     });
-    document.getElementById('headsetSummary').innerText = `פעילות: ${activeHeadsets}/${headsets.length}`;
+
+    document.getElementById('micSummary').innerText = `פעילים: ${activeMics}/${totalMics}`;
+    document.getElementById('headsetSummary').innerText = `פעילות: ${activeHs}/${totalHs}`;
+  }
+
+  function manualToggle(id) {
+    const ch = channels.find(c => c.id === id);
+    if (ch) {
+      ch.active = !ch.active;
+      sendOSC(ch.id, ch.name, ch.active, 'Manual Click');
+      renderUI();
+    }
   }
 
   function sendOSC(chNum, name, isOpen, reason) {
@@ -286,15 +316,16 @@
   }
 
   function emergencyMuteAll() {
-    mics.forEach(m => { m.active = false; sendOSC(m.channelNum, m.name, false, 'Emergency'); });
-    headsets.forEach(h => { h.active = false; sendOSC(h.channelNum, h.name, false, 'Emergency'); });
+    channels.forEach(ch => {
+      ch.active = false;
+      sendOSC(ch.id, ch.name, false, 'Emergency Mute');
+    });
     renderUI();
   }
 
   // אתחול
   applyQuantities();
   connectCloud();
-  setInterval(updateCameraBadges, 2000);
 </script>
 </body>
 </html>
