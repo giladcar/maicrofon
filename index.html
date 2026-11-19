@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>בקר מיקסר ראשי - מערכת NFC חכמה</title>
+  <title>בקר מיקסר ראשי - מערכת UHF RFID</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -15,24 +15,22 @@
     .config-bar input[type="number"] { width: 55px; padding: 4px; border-radius: 4px; border: 1px solid #555; background: #121212; color: #fff; font-weight: bold; text-align: center; }
     .config-bar input[type="text"] { width: 130px; padding: 4px 8px; border-radius: 4px; border: 1px solid #555; background: #121212; color: #4fc3f7; font-weight: bold; text-align: center; direction: ltr; }
     
-    button { background: #2979ff; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    button { background: #2979ff; color: white; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
     button:hover { background: #1565c0; }
     button.danger { background: #d32f2f; }
     button.success { background: #2e7d32; }
-    button.warning { background: #f57c00; color: #000; }
 
-    .nfc-bar { background: #181818; padding: 10px 24px; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; font-size: 0.88rem; }
-    .status-badge { padding: 6px 12px; border-radius: 6px; background: #2c1618; border: 1px solid #b71c1c; color: #ff8a80; font-weight: bold; }
+    .rfid-bar { background: #181818; padding: 10px 24px; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; font-size: 0.85rem; }
+    .status-badge { padding: 5px 12px; border-radius: 6px; background: #2c1618; border: 1px solid #b71c1c; color: #ff8a80; font-weight: bold; }
     .status-badge.online { background: #1b5e20; border-color: #4caf50; color: #a5d6a7; }
-    .status-badge.scanning { background: #01579b; border-color: #03a9f4; color: #81d4fa; }
 
-    .nfc-input-box { display: flex; align-items: center; gap: 8px; background: #222; padding: 5px 12px; border-radius: 6px; border: 1px solid #444; }
-    .nfc-input-box input { background: #111; border: 1px solid #555; color: #00e676; padding: 4px 8px; border-radius: 4px; font-family: monospace; width: 150px; direction: ltr; }
+    .rfid-input-box { display: flex; align-items: center; gap: 6px; background: #222; padding: 5px 10px; border-radius: 6px; border: 1px solid #444; }
+    .rfid-input-box input, .rfid-input-box select { background: #111; border: 1px solid #555; color: #00e676; padding: 4px 8px; border-radius: 4px; font-family: monospace; }
 
     .content { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
     .section-title { font-size: 1.05rem; color: #4fc3f7; border-bottom: 1px solid #333; padding-bottom: 6px; margin: 0 0 12px 0; display: flex; justify-content: space-between; }
     
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
     
     .card { background: #242424; border: 2px solid #333; border-radius: 8px; padding: 12px 8px; text-align: center; transition: 0.15s; position: relative; }
     .card.live { background: #1b5e20; border-color: #4caf50; box-shadow: 0 0 12px rgba(76, 175, 80, 0.35); }
@@ -41,14 +39,17 @@
 
     @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 214, 0, 0.6); } 70% { box-shadow: 0 0 0 10px rgba(255, 214, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 214, 0, 0); } }
 
-    .ch-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 5px; }
+    .ch-name { font-weight: bold; font-size: 0.95rem; margin-bottom: 4px; }
     .ch-badge { font-size: 0.8rem; padding: 3px 8px; border-radius: 4px; display: inline-block; background: #424242; cursor: pointer; }
     .card.live .ch-badge { background: #4caf50; color: #000; font-weight: bold; }
     .card.muted .ch-badge { background: #d32f2f; color: #fff; }
     
-    .tag-id { font-family: monospace; font-size: 0.72rem; color: #aaa; margin-top: 6px; background: #151515; padding: 2px 4px; border-radius: 4px; direction: ltr; }
-    .learn-btn { margin-top: 6px; background: #37474f; font-size: 0.72rem; padding: 4px 8px; width: 100%; }
-    .learn-btn:hover { background: #546e7a; }
+    .ch-loc { font-size: 0.74rem; color: #ddd; margin-top: 5px; }
+    .tag-id { font-family: monospace; font-size: 0.7rem; color: #aaa; margin-top: 5px; background: #151515; padding: 2px 4px; border-radius: 4px; direction: ltr; }
+    
+    .card-actions { display: flex; gap: 4px; margin-top: 6px; }
+    .small-btn { flex: 1; background: #37474f; font-size: 0.7rem; padding: 4px 4px; }
+    .small-btn:hover { background: #546e7a; }
 
     .log-box { background: #0b0b0b; border: 1px solid #333; border-radius: 6px; padding: 10px; height: 140px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; color: #81c784; direction: ltr; text-align: left; }
   </style>
@@ -56,7 +57,7 @@
 <body>
 
 <header>
-  <h1>📡 בקר מיקסר ראשי (מבוסס NFC)</h1>
+  <h1>📡 בקר מיקסר ראשי (UHF RFID)</h1>
   
   <div class="config-bar">
     <label>קוד חדר:</label>
@@ -71,22 +72,26 @@
   <button class="danger" onclick="emergencyMuteAll()">🔇 השתק הכל</button>
 </header>
 
-<div class="nfc-bar">
+<div class="rfid-bar">
   <div class="status-badge" id="cloudStatus">🌐 ענן: מתחבר...</div>
-  <button class="success" id="webNfcBtn" onclick="startWebNFC()">📱 הפעל סורק NFC במכשיר (Android)</button>
-  
-  <!-- קלט עבור קורא NFC שולחני או הדמיה ידנית -->
-  <div class="nfc-input-box">
-    <label>קליטת תגית / סימולציה:</label>
-    <input type="text" id="nfcManualInput" placeholder="העבר תגית או הקלד קוד..." onkeydown="if(event.key==='Enter') handleTagScan(this.value, 'USB/Manual')">
-    <button onclick="handleTagScan(document.getElementById('nfcManualInput').value, 'Manual')">סרוק</button>
+  <div class="status-badge" id="padRightStatus">📡 משטח ימין: ממתין...</div>
+  <div class="status-badge" id="padLeftStatus">📡 משטח שמאל: ממתין...</div>
+
+  <!-- קליטת קורא UHF RFID שולחני (Keyboard Wedge) -->
+  <div class="rfid-input-box">
+    <label>קורא שולחני / בדיקה:</label>
+    <select id="simSide">
+      <option value="right">משטח ימין</option>
+      <option value="left">משטח שמאל</option>
+    </select>
+    <input type="text" id="rfidDirectInput" placeholder="EPC Tag Code..." style="width:135px; direction:ltr;" onkeydown="if(event.key==='Enter') handleSingleTagPing(this.value, document.getElementById('simSide').value)">
   </div>
 </div>
 
 <div class="content">
   <div>
     <h2 class="section-title">
-      <span>🎤 מיקרופונים ידניים (העברת תגית NFC מחליפה בין MUTE ל-ON)</span>
+      <span>🎤 מיקרופונים (מונח על משטח ימין או שמאל = MUTE | מורם = ON)</span>
       <span id="micSummary" style="color:#aaa; font-size:0.85rem;"></span>
     </h2>
     <div class="grid" id="micsGrid"></div>
@@ -94,15 +99,15 @@
 
   <div>
     <h2 class="section-title">
-      <span>🎧 מדונות (תומך גם בתגית NFC על המשדר וגם בלחיצה)</span>
+      <span>🎧 מדונות (תומך גם במדבקת UHF RFID וגם בלחיצה)</span>
       <span id="headsetSummary" style="color:#aaa; font-size:0.85rem;"></span>
     </h2>
     <div class="grid" id="headsetsGrid"></div>
   </div>
 
   <div>
-    <h2 class="section-title">📡 יומן סריקות NFC ופקודות מיקסר (OSC)</h2>
-    <div class="log-box" id="oscLog">NFC Controller initialized. Ready to pair tags...</div>
+    <h2 class="section-title">📡 יומן קריאות UHF RFID ופקודות מיקסר (OSC)</h2>
+    <div class="log-box" id="oscLog">UHF RFID Controller initialized...</div>
   </div>
 </div>
 
@@ -111,11 +116,16 @@
   let mqttClient = null;
   let currentTopicPrefix = '';
 
-  let channels = []; // מאחד מיקרופונים ומדונות
-  let learningChannelId = null; // מזהה הערוץ שנמצא כרגע במצב "לימוד תגית"
+  let channels = [];
+  let learningChannelId = null;
+  let savedTagMap = JSON.parse(localStorage.getItem('uhf_rfid_tags') || '{}');
 
-  // טעינת מיפוי תגיות שמור מהזיכרון המקומי של הדפדפן
-  let savedTagMap = JSON.parse(localStorage.getItem('nfc_tag_assignments') || '{}');
+  // מעקב זמנים אחרונים שבהם כל משטח דיווח
+  let padHeartbeat = { right: 0, left: 0 };
+  // מתי כל תגית נראתה לאחרונה על כל משטח (מילישניות)
+  let tagLastSeen = { right: {}, left: {} };
+
+  const TAG_TIMEOUT_MS = 1200; // השהיית בטיחות של 1.2 שניות למניעת קפיצות רדיו
 
   function connectCloud() {
     if (mqttClient) mqttClient.end();
@@ -131,18 +141,30 @@
     mqttClient.on('connect', () => {
       cloudBadge.className = 'status-badge online';
       cloudBadge.innerText = `🌐 חדר פעיל: ${room}`;
-      logOSC(`CLOUD CONNECTED: Listening for remote NFC readers on room "${room}"`);
-      mqttClient.subscribe(`${currentTopicPrefix}/nfc/#`);
+      logOSC(`CLOUD CONNECTED: Listening for UHF RFID Pads on room "${room}"`);
+      mqttClient.subscribe(`${currentTopicPrefix}/rfid/#`);
     });
 
     mqttClient.on('message', (topic, message) => {
       try {
         const data = JSON.parse(message.toString());
-        // תמיכה בשני מצבים: סריקה רגעית (Tap) או נוכחות רציפה על משטח (Presence)
-        if (data.type === 'NFC_SCAN' && data.tagId) {
-          handleTagScan(data.tagId, data.readerSide || 'Remote Reader');
-        } else if (data.type === 'NFC_PRESENCE' && data.tagId) {
-          handleTagPresence(data.tagId, data.isPresent, data.readerSide || 'Tray Reader');
+        const side = (data.side === 'left') ? 'left' : 'right';
+        padHeartbeat[side] = Date.now();
+
+        // פורמט 1: המשטח שולח מערך של כל התגיות שנמצאות עליו כרגע: { side: "right", tags: ["EPC1", "EPC2"] }
+        if (Array.isArray(data.tags)) {
+          const now = Date.now();
+          data.tags.forEach(t => {
+            const cleanTag = String(t).trim().toUpperCase();
+            if (learningChannelId !== null) {
+              assignTagToChannel(learningChannelId, cleanTag);
+            }
+            tagLastSeen[side][cleanTag] = now;
+          });
+        }
+        // פורמט 2: המשטח שולח תגית בודדת בכל קריאה
+        else if (data.tagId) {
+          handleSingleTagPing(data.tagId, side);
         }
       } catch (e) {}
     });
@@ -158,8 +180,10 @@
         id: i,
         type: 'mic',
         name: `מיקרופון ${i}`,
-        tagId: savedTagMap[i] || `TAG-MIC-${i}`, // קוד ברירת מחדל לבדיקה מהירה
-        active: false
+        tagId: savedTagMap[i] || `EPC-MIC-${i}`,
+        onRight: false,
+        onLeft: false,
+        active: true // ברירת מחדל: אם לא על המשטח -> פתוח
       });
     }
 
@@ -169,8 +193,10 @@
         id: chNum,
         type: 'headset',
         name: `מדונה ${i}`,
-        tagId: savedTagMap[chNum] || `TAG-HS-${i}`,
-        active: false
+        tagId: savedTagMap[chNum] || `EPC-HS-${i}`,
+        onRight: false,
+        onLeft: false,
+        active: false // מדונות מתחילות מושתקות עד שמופעלות
       });
     }
 
@@ -178,83 +204,96 @@
     renderUI();
   }
 
-  // הפעלת סורק NFC מובנה בדפדפן (עובד במכשירי אנדרואיד עם Chrome)
-  async function startWebNFC() {
-    if (!('NDEFReader' in window)) {
-      alert('הדפדפן או המחשב הזה לא תומכים ב-Web NFC מובנה (נתמך ב-Chrome על מכשירי אנדרואיד). תוכל להשתמש בקורא NFC חיצוני או בסימולציה למעלה.');
-      return;
-    }
+  function handleSingleTagPing(rawTag, side) {
+    const cleanTag = String(rawTag).trim().toUpperCase();
+    if (!cleanTag) return;
+    document.getElementById('rfidDirectInput').value = '';
 
-    try {
-      const ndef = new NDEFReader();
-      await ndef.scan();
-      const btn = document.getElementById('webNfcBtn');
-      btn.innerText = '📡 סורק NFC פעיל! קרב מדבקה';
-      btn.style.background = '#0288d1';
-      logOSC('Web NFC Scanner started successfully.');
+    padHeartbeat[side] = Date.now();
 
-      ndef.onreading = ({ serialNumber }) => {
-        if (serialNumber) {
-          handleTagScan(serialNumber.toUpperCase(), 'Android WebNFC');
-        }
-      };
-    } catch (error) {
-      alert('שגיאה בהפעלת סורק NFC: ' + error.message);
-    }
-  }
-
-  // טיפול בסריקת תגית (החלפת מצב ON/MUTE או שיוך תגית חדשה)
-  function handleTagScan(rawTagId, source) {
-    const tagId = String(rawTagId).trim();
-    if (!tagId) return;
-    document.getElementById('nfcManualInput').value = '';
-
-    // אם אנחנו במצב "לימוד תגית" לערוץ מסוים
     if (learningChannelId !== null) {
-      const ch = channels.find(c => c.id === learningChannelId);
-      if (ch) {
-        ch.tagId = tagId;
-        savedTagMap[ch.id] = tagId;
-        localStorage.setItem('nfc_tag_assignments', JSON.stringify(savedTagMap));
-        logOSC(`PAIRED: Tag [${tagId}] assigned to ${ch.name} (Ch ${ch.id})`);
-      }
-      learningChannelId = null;
-      renderUI();
+      assignTagToChannel(learningChannelId, cleanTag);
       return;
     }
 
-    // חיפוש הערוץ שמשויך לתגית שנסרקה
-    const targetChannel = channels.find(c => c.tagId.toLowerCase() === tagId.toLowerCase());
-    if (!targetChannel) {
-      logOSC(`UNKNOWN TAG SCANNED: [${tagId}] from ${source}. Click "שייך תגית" on a channel first.`);
-      return;
-    }
+    tagLastSeen[side][cleanTag] = Date.now();
+    evaluatePresenceLoop();
+  }
 
-    // החלפת מצב (Toggle)
-    targetChannel.active = !targetChannel.active;
-    sendOSC(targetChannel.id, targetChannel.name, targetChannel.active, `NFC Scan (${source})`);
+  function assignTagToChannel(chId, tagCode) {
+    const ch = channels.find(c => c.id === chId);
+    if (ch) {
+      ch.tagId = tagCode;
+      savedTagMap[ch.id] = tagCode;
+      localStorage.setItem('uhf_rfid_tags', JSON.stringify(savedTagMap));
+      logOSC(`PAIRED: UHF Tag [${tagCode}] -> ${ch.name} (Ch ${ch.id})`);
+    }
+    learningChannelId = null;
     renderUI();
   }
 
-  // טיפול במשטח נוכחות רציפה (כאשר תגית יושבת קבוע על משטח = MUTE, מורמת = ON)
-  function handleTagPresence(tagId, isPresentOnTray, source) {
-    const targetChannel = channels.find(c => c.tagId.toLowerCase() === tagId.toLowerCase());
-    if (!targetChannel) return;
-
-    const shouldBeOpen = !isPresentOnTray;
-    if (targetChannel.active !== shouldBeOpen) {
-      targetChannel.active = shouldBeOpen;
-      sendOSC(targetChannel.id, targetChannel.name, targetChannel.active, isPresentOnTray ? `מונח על משטח (${source})` : `הורם ממשטח (${source})`);
-      renderUI();
-    }
-  }
-
-  function startLearningTag(channelId) {
-    learningChannelId = (learningChannelId === channelId) ? null : channelId;
+  function startLearning(chId) {
+    learningChannelId = (learningChannelId === chId) ? null : chId;
     if (learningChannelId) {
-      logOSC(`LEARNING MODE: Scan any NFC sticker now to assign it to Channel ${channelId}...`);
+      logOSC(`LEARNING: Place UHF tag for Channel ${chId} on any pad now...`);
     }
     renderUI();
+  }
+
+  // סימולציה ידנית לבדיקה על המסך (מניח או מרים תגית מהמשטח)
+  function toggleSimulatedPad(chId) {
+    const ch = channels.find(c => c.id === chId);
+    if (!ch) return;
+    const isCurrentlyOnPad = ch.onRight || ch.onLeft;
+    if (isCurrentlyOnPad) {
+      // הסרה מהמשטח
+      delete tagLastSeen.right[ch.tagId.toUpperCase()];
+      delete tagLastSeen.left[ch.tagId.toUpperCase()];
+    } else {
+      // הנחה על משטח ימין (נחדש את החותמת כל חצי שנייה בסימולציה)
+      tagLastSeen.right[ch.tagId.toUpperCase()] = Date.now() + 99999999;
+    }
+    evaluatePresenceLoop();
+  }
+
+  // לולאה שרצה כל 250 מילישניות ובודקת אילו תגיות נמצאות כרגע על המשטחים
+  function evaluatePresenceLoop() {
+    const now = Date.now();
+    let changed = false;
+
+    // עדכון חיווי חיבור משטחים
+    const rBadge = document.getElementById('padRightStatus');
+    const lBadge = document.getElementById('padLeftStatus');
+    rBadge.className = (now - padHeartbeat.right < 5000) ? 'status-badge online' : 'status-badge';
+    rBadge.innerText = (now - padHeartbeat.right < 5000) ? '📡 משטח ימין: פעיל' : '📡 משטח ימין: לא מחובר';
+    
+    lBadge.className = (now - padHeartbeat.left < 5000) ? 'status-badge online' : 'status-badge';
+    lBadge.innerText = (now - padHeartbeat.left < 5000) ? '📡 משטח שמאל: פעיל' : '📡 משטח שמאל: לא מחובר';
+
+    channels.forEach(ch => {
+      const code = ch.tagId.toUpperCase();
+      const seenRight = (now - (tagLastSeen.right[code] || 0)) < TAG_TIMEOUT_MS;
+      const seenLeft = (now - (tagLastSeen.left[code] || 0)) < TAG_TIMEOUT_MS;
+
+      if (ch.onRight !== seenRight || ch.onLeft !== seenLeft) {
+        ch.onRight = seenRight;
+        ch.onLeft = seenLeft;
+        changed = true;
+      }
+
+      // עבור מיקרופונים ידניים: מונח על משטח = MUTE, מורם = ON
+      if (ch.type === 'mic') {
+        const shouldBeOpen = !(seenRight || seenLeft);
+        if (ch.active !== shouldBeOpen) {
+          ch.active = shouldBeOpen;
+          const loc = seenRight ? 'מונח במשטח ימין' : (seenLeft ? 'מונח במשטח שמאל' : 'הורם לבמה');
+          sendOSC(ch.id, ch.name, ch.active, loc);
+          changed = true;
+        }
+      }
+    });
+
+    if (changed) renderUI();
   }
 
   function renderUI() {
@@ -267,13 +306,13 @@
     let activeHs = 0, totalHs = 0;
 
     channels.forEach(ch => {
-      if (ch.type === 'mic') {
-        totalMics++;
-        if (ch.active) activeMics++;
-      } else {
-        totalHs++;
-        if (ch.active) activeHs++;
-      }
+      if (ch.type === 'mic') { totalMics++; if (ch.active) activeMics++; }
+      else { totalHs++; if (ch.active) activeHs++; }
+
+      let locText = ch.type === 'mic' ? 'על הבמה (פתוח)' : 'שליטה ידנית';
+      if (ch.onRight && ch.onLeft) locText = 'נמצא בשני המשטחים';
+      else if (ch.onRight) locText = 'מונח במשטח ימין';
+      else if (ch.onLeft) locText = 'מונח במשטח שמאל';
 
       const isLearning = learningChannelId === ch.id;
       const card = document.createElement('div');
@@ -281,10 +320,12 @@
       card.innerHTML = `
         <div class="ch-name">${ch.name}</div>
         <div class="ch-badge" onclick="manualToggle(${ch.id})">${ch.active ? 'ON (פתוח)' : 'MUTE (מושתק)'}</div>
-        <div class="tag-id" title="קוד תגית NFC">${ch.tagId}</div>
-        <button class="learn-btn" onclick="startLearningTag(${ch.id})">
-          ${isLearning ? '⏳ קרב מדבקה כעת...' : '🏷️ שייך תגית NFC'}
-        </button>
+        <div class="ch-loc">${locText}</div>
+        <div class="tag-id">${ch.tagId}</div>
+        <div class="card-actions">
+          <button class="small-btn" onclick="startLearning(${ch.id})">${isLearning ? '⏳ סרוק...' : '🏷️ שייך תגית'}</button>
+          ${ch.type === 'mic' ? `<button class="small-btn" onclick="toggleSimulatedPad(${ch.id})">${(ch.onRight || ch.onLeft) ? '⬆️ הרם' : '⬇️ הנח'}</button>` : ''}
+        </div>
       `;
 
       if (ch.type === 'mic') micsGrid.appendChild(card);
@@ -299,7 +340,7 @@
     const ch = channels.find(c => c.id === id);
     if (ch) {
       ch.active = !ch.active;
-      sendOSC(ch.id, ch.name, ch.active, 'Manual Click');
+      sendOSC(ch.id, ch.name, ch.active, 'Manual Toggle');
       renderUI();
     }
   }
@@ -323,9 +364,9 @@
     renderUI();
   }
 
-  // אתחול
   applyQuantities();
   connectCloud();
+  setInterval(evaluatePresenceLoop, 250);
 </script>
 </body>
 </html>
